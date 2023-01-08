@@ -1,0 +1,29 @@
+{
+  "name": "penyo-db",
+  "version": "1.0.0",
+  "description": "A TypeScript-Based NoSQL database which provides basic functions for users.",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "ts-node index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/penyoofficial/penyo-db.git"
+  },
+  "keywords": [
+    "nosql",
+    "database",
+    "json"
+  ],
+  "author": "Penyo",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/penyoofficial/penyo-db/issues"
+  },
+  "homepage": "https://github.com/penyoofficial/penyo-db#readme",
+  "dependencies": {
+    "@types/elliptic": "^6.4.14",
+    "@types/node": "^20.3.3",
+    "tsc-node": "^0.0.3"
+  }
+}
