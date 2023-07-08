@@ -3,9 +3,9 @@ import * as ENC from './encryption'
 /** 用户。 */
 export class User {
     /** 名称 */
-    name: string
+    name: string = `user_${ENC.getMD5(new Date().toISOString())}`
     /** 口令 */
-    token: string
+    token: string = "1234"
     /** 权限 */
     permission: Permission | TableUASummary[] = Permission.INACCESSIBLE
 
@@ -14,6 +14,36 @@ export class User {
             this.name = name
         if (name && token)
             this.token = token
+    }
+
+    /** 获取用户在指定表上的权限。 */
+    getTablePermission(namespace: string, tname: string) {
+        if ((this.permission as Permission) in Permission)
+            return this.permission as Permission
+        let tm: TableUASummary | null = null
+        if (this.permission?.[0] instanceof TableUASummary)
+            (this.permission as TableUASummary[]).forEach(tuas => {
+                if (namespace === tuas.namespace && tname === tuas.name)
+                    return tm = tuas
+            })
+        if (!tm)
+            return Permission.INACCESSIBLE
+        return tm
+    }
+
+    /** 设置用户在指定表上的权限。 */
+    setTablePermission(namespace: string, tname: string, permission: Permission) {
+
+    }
+}
+
+/** 管理员。 */
+export class Admin extends User {
+    /** 权限 */
+    readonly permission = Permission.DOMINATE
+
+    constructor(name: string, token: string) {
+        super(name, token)
     }
 }
 
@@ -30,38 +60,38 @@ export enum Permission {
 /** 数据库。 */
 export class Database {
     /** 名称 */
-    name: string
+    name: string = `database_${ENC.getMD5(new Date().toISOString())}`
     /** 当前库所包含的表 */
     tbs: Table[] = []
 
     /** 根据名称获取表。 */
-    getTable(name: string) {
-        let tb: Table | null = null
+    getTable(name: string): Table | null {
+        let tbm: Table | null = null
         this.tbs.forEach(t => {
             if (t.name === name)
-                return tb = t
+                return tbm = t
         })
-        return tb
+        return tbm
     }
 }
 
 /** 数据表。 */
 export class Table {
     /** 名称 */
-    name: string
+    name: string = `table_${ENC.getMD5(new Date().toISOString())}`
     /** 列定义（列名，列类型） */
     cdef = new Map<string, SupportType>()
     /** 当前表所包含的记录（行 MD5，值） */
     rows = new Map<string, Unit<unknown>[]>()
 
     /** 根据名称获取列类型。 */
-    getColumnType(name: string) {
-        let st: SupportType | null = null
+    getColumnType(name: string): SupportType | null {
+        let stm: SupportType | null = null
         this.cdef.forEach((v, k) => {
             if (k === name)
-                return st = v
+                return stm = v
         })
-        return st
+        return stm
     }
 
     /** 根据列名称获取视图。 */
@@ -74,10 +104,10 @@ export class Table {
         let rtemp = this.rows
         rtemp.forEach(v => {
             v.forEach(u => {
-                if (!(names as string[]).includes(u.cname) && names)
+                if (!(names as string[]).includes(u.cname as string) && names)
                     v.splice(v.indexOf(u), 1)
             })
-            view.rows.set(ENC.getMD5(JSON.stringify(v)), v)
+            view.rows.set(ENC.getSHA512(JSON.stringify(v)), v)
         })
         return view
     }
@@ -97,15 +127,24 @@ export class Table {
 
 /** 视图。 */
 export class View extends Table {
-    /** 获得两个视图的交叉视图。 */
-    getCrossedView(v1: View, v2: View) {
+    /** 名称 */
+    name: string = `view_${ENC.getMD5(new Date().toISOString())}`
+
+    /** 获得与另一个视图的交叉视图。 */
+    getCrossedView(anotherView: View) {
         let cv = new View()
         // to be edited
         return cv
     }
 
+    /** 检查视图是否为逻辑空。 */
     isEmpty() {
         return this.rows.size == 0
+    }
+
+    /** 转换为控制台视图。 */
+    toConsoleView() {
+
     }
 }
 
@@ -134,119 +173,96 @@ export enum SupportType {
 /** 数据单元。 */
 export class Unit<T> {
     /** 所属列名 */
-    cname: string
+    cname: string | undefined = undefined
     /** 值 */
-    value: T
+    value: T | null = null
 }
 
 /** 数据表用户权限摘要。 */
 export class TableUASummary {
     /** 表命名空间（所属数据库） */
-    namespace: Database["name"]
+    namespace: Database["name"] | undefined = undefined
     /** 表名称 */
-    name: Table["name"]
+    name: Table["name"] | undefined = undefined
     /** 表权限 */
     permission: Permission = Permission.INACCESSIBLE
 }
 
 /** 虚拟数据库。 */
 export default class ORM {
-    /** 可用状态 */
-    static isInitialized = false
     /** 线程锁 */
     static isLocked = false
     /** 账户群 */
-    private static accounts: {
-        /** 根管理员 */
-        root: User
-        users: User[]
-    } = {
-            root: new User("root"),
-            users: []
-        }
+    static accounts: (User | Admin)[] = []
     /** 数据 */
-    private static data: Database[] = []
+    static data: Database[] = []
     /** 状态 */
     state: {
         /** 当前操作用户 */
-        user: User | null
+        user: User | Admin | null
         /** 命名空间（正在操作的数据库） */
-        namespace: Database["name"] | undefined
+        namespace: Database["name"]
     } = {
             user: null,
-            namespace: undefined
+            namespace: ""
         }
 
-    constructor(name: string, token: string) {
-        ORM.accounts.root = {
-            name: "root",
-            token: "1234",
-            permission: Permission.DOMINATE
-        }
-        this.state.user = ORM.accounts.root
-        this.state.namespace = ""
-        if (this.state.user.name === name && this.state.user.token === token)
-            ORM.isInitialized = true
+    constructor() {
+        ORM.accounts.push(new Admin("root", "1234"))
     }
 
-    /** 提交对 ORM 的更改到物理数据库，并重加密。 */
-    static synchronize() {
-        if (ORM.isInitialized) {
-            // to be edited
-            return
-        }
-        try {
-            throw new Error("ORM 未初始化，所有类方法均不可用！")
-        } catch (e) {
-            console.error(e)
-        }
+    /** 提交对 ORM 的更改到物理数据库。 */
+    async synchronize() {
+        await this.untilUnlock()
+        // to be edited
     }
 
-    /** 获取账户群。 */
-    getAccounts() {
-        if (ORM.isInitialized)
-            return ORM.accounts
-        try {
-            throw new Error("ORM 未初始化，所有类方法均不可用！")
-        } catch (e) {
-            console.error(e)
-        }
+    /** 阻塞所有尝试修改 ORM 核心数据和提交修改的线程，除非线程锁未生效。 */
+    async untilUnlock() {
+        while (ORM.isLocked)
+            await new Promise(resolve => setTimeout(resolve, 100))
     }
 
     /** 根据名称获取用户。 */
-    getUser(name: string) {
-        const accounts = this.getAccounts() as {
-            root: User
-            users: User[]
-        }
-        let flag: User | null = null
-        if (name === "root")
-            return accounts.root
-        accounts.users.forEach(u => {
+    getUser(name: string): User | Admin | null {
+        let um: User | Admin | null = null
+        ORM.accounts.forEach(u => {
             if (u.name === name)
-                flag = u
+                return um = u
+        })
+        return um
+    }
+
+    /** 根据名称设置用户。 */
+    setUser(name: string, user: User | Admin) {
+        let flag = false
+        ORM.accounts.forEach(u => {
+            if (u.name === name) {
+                u = user
+                return flag = true
+            }
         })
         return flag
     }
 
-    /** 获取数据。 */
-    getData() {
-        if (ORM.isInitialized)
-            return ORM.data
-        try {
-            throw new Error("ORM 未初始化，所有类方法均不可用！")
-        } catch (e) {
-            console.error(e)
-        }
+    /** 根据名称获取数据库。 */
+    getDatabase(name: string): Database | null {
+        let dbm: Database | null = null
+        ORM.data.forEach(db => {
+            if (db.name === name)
+                return dbm = db
+        })
+        return dbm
     }
 
-    /** 根据名称获取数据库。 */
-    getDatabase(name: string) {
-        const database = this.getData() as Database[]
-        let flag: Database | null = null
-        database.forEach(db => {
-            if (db.name === name)
-                flag = db
+    /** 根据名称设置数据库。 */
+    setDatabase(name: string, database: Database) {
+        let flag = false
+        ORM.data.forEach(db => {
+            if (db.name === name) {
+                db = database
+                return flag = true
+            }
         })
         return flag
     }
