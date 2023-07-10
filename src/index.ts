@@ -1,6 +1,6 @@
 import { blackBG, white, blue, italic, yellow, green, red } from './ansi-sgr'
 import { createInterface } from 'readline'
-import ORM, { Permission, SupportType } from './orm'
+import ORM from './orm'
 import * as account from './account'
 import * as database from './database'
 import * as table from './table'
@@ -24,32 +24,18 @@ async function blockingInput(notice?: string) {
 async function grammarAnalyze(comm: string) {
     while (comm.includes("  "))
         comm = comm.replace("  ", " ")
-    /** 获得 `Permission` 成员。 */
-    const getPermission = (name: string) => {
-        const member: Permission = eval(`Permission[${name.toUpperCase()}]`)
-        if (typeof member === "string" && member.length > 0)
-            return member
-        return Permission["INACCESSIBLE"]
-    }
-    /** 获得 `SupportType` 成员。 */
-    const getSupportType = (name: string) => {
-        const member: SupportType = eval(`SupportType[${name.toUpperCase()}]`)
-        if (typeof member === "string" && member.length > 0)
-            return member
-        return SupportType["STRING"]
-    }
     /** 切割参数串为便于取用的表或图。 */
     const cutPara = (paras: string, isKVPair?: boolean, kvSplitChar?: string) => {
         let paraArr = paras.split(",")
-        let paraMap: Map<string, string> = new Map()
+        let paraMap = new Map<string, string>()
         paraArr.forEach(p => {
             p = p.trim()
             if (isKVPair && kvSplitChar)
                 paraMap.set(p.split(kvSplitChar)[0].trim(), p.split(kvSplitChar)[1].trim())
         })
-        return isKVPair ? paraArr : paraMap
+        return isKVPair ? paraMap : paraArr
     }
-    return new Promise<string>(async (resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         if (/^ ?login/.test(comm)) {
             const commLogin = /^ ?login (.+?) with( token| password)? (.+?) ?;? ?$/
             if (commLogin.test(comm)) {
@@ -96,14 +82,14 @@ async function grammarAnalyze(comm: string) {
                     })
             }
         } else if (/^ ?create/.test(comm)) {
-            const commCreateUser = /^ ?create( user| admin) (.+?) with token (.+?) ?;? ?$/
+            const commCreateUser = /^ ?create( user| admin) (.+?) with( token| password)? (.+?) ?;? ?$/
             const commCreateDatabase = /^ ?create database (.+?) ?;? ?$/
             const commCreateTable = /^ ?create table (.+?) ?\(( ?.+? .+? ?[,)]) ?;? ?$/
             if (commCreateUser.test(comm)) {
                 const paras = comm.match(commCreateUser) as string[]
-                const isAdmin = paras[1] == " user" ? false : true
+                const isAdmin = paras[1] === " user" ? false : true
                 const name = paras[2]
-                const token = paras[3]
+                const token = paras[4]
                 await account.create(orm, isAdmin, name, token)
                     .then(r => {
                         return resolve(r)
@@ -124,15 +110,8 @@ async function grammarAnalyze(comm: string) {
             } else if (commCreateTable.test(comm)) {
                 const paras = comm.match(commCreateTable) as string[]
                 const name = paras[1]
-                const cdef = paras[2].slice(0, -1)
-                await table.create(orm, name, ((cdef: string) => {
-                    let mapG1 = cutPara(cdef, true, " ") as Map<string, string>
-                    let mapG2 = new Map<string, SupportType>()
-                    mapG1.forEach((v, k) => {
-                        mapG2.set(k, getSupportType(v))
-                    })
-                    return mapG2
-                })(cdef))
+                const cdef = cutPara(paras[2].slice(0, -1), true, " ") as Map<string, string>
+                await table.create(orm, name, cdef)
                     .then(r => {
                         return resolve(r)
                     })
@@ -140,7 +119,7 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             }
-        } else if (/^drop/.test(comm)) {
+        } else if (/^ ?drop/.test(comm)) {
             const commDropUser = /^ ?drop user (.+?) ?;? ?$/
             const commDropDatabase = /^ ?drop database (.+?) ?;? ?$/
             const commDropTable = /^ ?drop table (.+?) ?;? ?$/
@@ -175,15 +154,14 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             }
-        } else if (/^grant/.test(comm)) {
-            const commGrant = /^ ?grant (.+?)( on (.+?)\.(.+?))? to (.+?) ?;? ?$/
+        } else if (/^ ?grant/.test(comm)) {
+            const commGrant = /^ ?grant (.+?)( on (.+?\..+?))? to (.+?) ?;? ?$/
             if (commGrant.test(comm)) {
                 const paras = comm.match(commGrant) as string[]
                 const permission = paras[1]
-                const namespace: string | undefined = paras[3]
-                const name: string | undefined = paras[4]
-                const userName = paras[5]
-                await account.grant(orm, getPermission(permission), userName, namespace, name)
+                const tables = paras[3] ? cutPara(paras[3], true, ".") as Map<string, string> : undefined
+                const userName = paras[4]
+                await account.grant(orm, permission, userName, tables)
                     .then(r => {
                         return resolve(r)
                     })
@@ -191,7 +169,7 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             }
-        } else if (/^use/.test(comm)) {
+        } else if (/^ ?use/.test(comm)) {
             const commUse = /^ ?use (.+?) ?;? ?$/
             if (commUse.test(comm)) {
                 const paras = comm.match(commUse) as string[]
@@ -204,7 +182,7 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             }
-        } else if (/^select/.test(comm)) {
+        } else if (/^ ?select/.test(comm)) {
             const commSelectDatabase = /^ ?select database(\(\))? ?;? ?$/
             const commSelectRow = /^ ?select( distinct)? (.+?) from (.+?)( where (.+?))? ?;? ?$/
             if (commSelectDatabase.test(comm)) {
@@ -218,10 +196,10 @@ async function grammarAnalyze(comm: string) {
             } else if (commSelectRow.test(comm)) {
                 const paras = comm.match(commSelectRow) as string[]
                 const needDistinct = paras[1] ? true : false
-                const cnames = paras[2]
-                const tnames = paras[3]
-                const conditions = paras[5]
-                await table.select(orm, needDistinct, cutPara(cnames) as string[], cutPara(tnames) as string[], conditions ? cutPara(conditions) as string[] : undefined)
+                const cnames = cutPara(paras[2]) as string[]
+                const tnames = cutPara(paras[3]) as string[]
+                const conditions = paras[5] ? cutPara(paras[5]) as string[] : undefined
+                await table.select(orm, needDistinct, cnames, tnames, conditions)
                     .then(r => {
                         return resolve(r)
                     })
@@ -229,7 +207,7 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             }
-        } else if (/^desc/.test(comm)) {
+        } else if (/^ ?desc/.test(comm)) {
             const commDesc = /^ ?desc (.+?) ?;? ?$/
             if (commDesc.test(comm)) {
                 const paras = comm.match(commDesc) as string[]
@@ -242,14 +220,14 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             }
-        } else if (/^insert/.test(comm)) {
+        } else if (/^ ?insert/.test(comm)) {
             const commInsert = /^ ?insert( into)? (.+?)( ?\(( ?.+? ?[,)]) ?)? values ?\(( ?.+? ?[,)]) ?;? ?$/
             if (commInsert.test(comm)) {
                 const paras = comm.match(commInsert) as string[]
                 const name = paras[2]
-                const cnames = paras[4] ? paras[4].slice(0, -1) : undefined
-                const values = paras[5].slice(0, -1)
-                await table.insert(orm, name, cutPara(values) as string[], cnames ? cutPara(cnames) as string[] : undefined)
+                const cnames = paras[4] ? cutPara(paras[4].slice(0, -1)) as string[] : undefined
+                const values = cutPara(paras[5].slice(0, -1)) as string[]
+                await table.insert(orm, name, values, cnames)
                     .then(r => {
                         return resolve(r)
                     })
@@ -257,14 +235,14 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             }
-        } else if (/^update/.test(comm)) {
+        } else if (/^ ?update/.test(comm)) {
             const commUpdate = /^ ?update (.+?) set ( ?.+? ?= ?.+? ?)( where (.+?))? ?;? ?$/
             if (commUpdate.test(comm)) {
                 const paras = comm.match(commUpdate) as string[]
                 const name = paras[1]
-                const values = paras[2]
-                const conditions = paras[4]
-                await table.update(orm, name, cutPara(values) as string[], conditions ? cutPara(conditions) as string[] : undefined)
+                const values = cutPara(paras[2], true, "=") as Map<string, string>
+                const conditions = paras[4] ? cutPara(paras[4]) as string[] : undefined
+                await table.update(orm, name, values, conditions)
                     .then(r => {
                         return resolve(r)
                     })
@@ -272,13 +250,13 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             }
-        } else if (/^delete/.test(comm)) {
+        } else if (/^ ?delete/.test(comm)) {
             const commDelete = /^ ?delete from (.+?)( where (.+?))? ?;? ?$/
             if (commDelete.test(comm)) {
                 const paras = comm.match(commDelete) as string[]
                 const name = paras[1]
-                const conditions = paras[3]
-                await table.del(orm, name, conditions ? cutPara(conditions) as string[] : undefined)
+                const conditions = paras[3] ? cutPara(paras[3]) as string[] : undefined
+                await table.del(orm, name, conditions)
                     .then(r => {
                         return resolve(r)
                     })
@@ -294,23 +272,23 @@ async function grammarAnalyze(comm: string) {
 (async () => {
     console.clear()
     console.log("  " + blackBG(white("Copyright (c) Penyo. All rights reserved. ")))
-    console.log("  " + blue(`欢迎使用 PenyoDB 交互式解释器！`))
-    console.log("  " + blue(`您可以使用您熟悉的 SQL 来编写命令。\n`))
+    console.log("  " + blue("欢迎使用 PenyoDB 交互式解释器！"))
+    console.log("  " + blue("您可以使用 SQL-like 来编写命令。"))
+    console.log()
 
     let comm: string
     do {
         comm = (await blockingInput()).trim().toLowerCase()
+        console.log(italic(yellow("正在处理中......")))
         if (comm !== "quit") {
-            console.log(italic(yellow("正在处理中......")))
             await grammarAnalyze(comm)
                 .then(r => {
-                    console.log("\x1b[1F\x1b[K" + italic(green(r)))
+                    console.log("\x1b[1F\x1b[K" + italic(green(typeof r === "string" ? r : JSON.stringify(r))))
                 })
                 .catch(e => {
                     console.error("\x1b[1F\x1b[K" + italic(red(e)))
                 })
         } else {
-            console.log(italic(yellow("正在处理中......")))
             await orm.synchronize()
             console.log("\x1b[1F\x1b[K" + "拜拜~ o(*￣▽￣*)ブ")
             break

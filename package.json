@@ -4,8 +4,8 @@
   "description": "A TypeScript-Based NoSQL database which provides basic functions for users.",
   "main": "index.ts",
   "scripts": {
-    "dev": "tsc index.ts --outDir ./dist & node ./dist/index.js",
-    "build": "tsc index.ts --outDir ./dist & uglifyjs ./dist/*.js -o ./dist/penyodb.min.js & node ./dist/penyodb.min.js"
+    "dev": "tsc ./src/index.ts --outDir ./test --sourceMap true & node --inspect ./test/index.js",
+    "build": "tsc ./src/index.ts --outDir ./temp & uglifyjs ./temp/*.js -o ./penyo-db.min.js & node ./penyo-db.min.js"
   },
   "repository": {
     "type": "git",
@@ -22,8 +22,9 @@
     "url": "https://github.com/penyoofficial/penyo-db/issues"
   },
   "homepage": "https://github.com/penyoofficial/penyo-db#readme",
-  "dependencies": {
+  "devDependencies": {
     "@types/node": "^20.3.3",
+    "inspect": "^0.0.2",
     "typescript": "^5.1.6",
     "uglify-js": "^3.17.4"
   }
