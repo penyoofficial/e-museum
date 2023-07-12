@@ -4,8 +4,9 @@
   "description": "A TypeScript-Based NoSQL database which provides basic functions for users.",
   "main": "index.ts",
   "scripts": {
-    "dev": "tsc ./src/index.ts --outDir ./test --sourceMap true & node --inspect ./test/index.js",
-    "build": "tsc ./src/index.ts --outDir ./temp & uglifyjs ./temp/*.js -o ./penyo-db.min.js & node ./penyo-db.min.js"
+    "dev": "tsc ./src/repl.ts --outDir ./temp --sourceMap true & node --inspect ./temp/repl.js",
+    "build": "tsc ./src/index.ts --outFile ./dist/penyo-db.js --module amd --allowJs & uglifyjs ./dist/penyo-db.js -o ./dist/penyo-db.min.js",
+    "reset": "node ./clean.mjs & npm i"
   },
   "repository": {
     "type": "git",

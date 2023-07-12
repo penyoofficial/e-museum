@@ -1,27 +1,11 @@
-import { blackBG, white, blue, italic, yellow, green, red } from './ansi-sgr'
-import { createInterface } from 'readline'
-import ORM from './orm'
-import * as account from './account'
-import * as database from './database'
-import * as table from './table'
+import * as Model from './model'
+import { AccountService, DatabaseService, TableService } from './service'
 
-/** 当前实例可控的虚拟数据库 */
-let orm = new ORM()
+/** 当前实例可控的抽象数据库 */
+let orm = new Model.ORM()
 
-async function blockingInput(notice?: string) {
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout
-    })
-    return new Promise<string>(resolve => {
-        rl.question(notice || "", input => {
-            resolve(input)
-            rl.close()
-        })
-    })
-}
-
-async function grammarAnalyze(comm: string) {
+/** 解析 SQL-like 语句，并调用对应的 ORM 服务。 */
+export async function grammarAnalyze(comm: string) {
     while (comm.includes("  "))
         comm = comm.replace("  ", " ")
     /** 切割参数串为便于取用的表或图。 */
@@ -43,7 +27,7 @@ async function grammarAnalyze(comm: string) {
                 const name = paras[1]
                 const token = paras[3]
                 if (commLogin.test(comm)) {
-                    await account.login(orm, name, token)
+                    await AccountService.login(orm, name, token)
                         .then(r => {
                             return resolve(r)
                         })
@@ -57,7 +41,7 @@ async function grammarAnalyze(comm: string) {
             const commShowDatabases = /^ ?show databases ?;? ?$/
             const commShowTables = /^ ?show tables ?;? ?$/
             if (commShowUsers.test(comm)) {
-                await account.show(orm)
+                await AccountService.show(orm)
                     .then(r => {
                         return resolve(r)
                     })
@@ -65,7 +49,7 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             } else if (commShowDatabases.test(comm)) {
-                await database.show(orm)
+                await DatabaseService.show(orm)
                     .then(r => {
                         return resolve(r)
                     })
@@ -73,7 +57,7 @@ async function grammarAnalyze(comm: string) {
                         return reject(e)
                     })
             } else if (commShowTables.test(comm)) {
-                await table.show(orm)
+                await TableService.show(orm)
                     .then(r => {
                         return resolve(r)
                     })
@@ -90,7 +74,7 @@ async function grammarAnalyze(comm: string) {
                 const isAdmin = paras[1] === " user" ? false : true
                 const name = paras[2]
                 const token = paras[4]
-                await account.create(orm, isAdmin, name, token)
+                await AccountService.create(orm, isAdmin, name, token)
                     .then(r => {
                         return resolve(r)
                     })
@@ -100,7 +84,7 @@ async function grammarAnalyze(comm: string) {
             } else if (commCreateDatabase.test(comm)) {
                 const paras = comm.match(commCreateDatabase) as string[]
                 const name = paras[1]
-                await database.create(orm, name)
+                await DatabaseService.create(orm, name)
                     .then(r => {
                         return resolve(r)
                     })
@@ -111,7 +95,7 @@ async function grammarAnalyze(comm: string) {
                 const paras = comm.match(commCreateTable) as string[]
                 const name = paras[1]
                 const cdef = cutPara(paras[2].slice(0, -1), true, " ") as Map<string, string>
-                await table.create(orm, name, cdef)
+                await TableService.create(orm, name, cdef)
                     .then(r => {
                         return resolve(r)
                     })
@@ -126,7 +110,7 @@ async function grammarAnalyze(comm: string) {
             if (commDropUser.test(comm)) {
                 const paras = comm.match(commDropUser) as string[]
                 const name = paras[1]
-                await account.drop(orm, name)
+                await AccountService.drop(orm, name)
                     .then(r => {
                         return resolve(r)
                     })
@@ -136,7 +120,7 @@ async function grammarAnalyze(comm: string) {
             } else if (commDropDatabase.test(comm)) {
                 const paras = comm.match(commDropDatabase) as string[]
                 const name = paras[1]
-                await database.drop(orm, name)
+                await DatabaseService.drop(orm, name)
                     .then(r => {
                         return resolve(r)
                     })
@@ -146,7 +130,7 @@ async function grammarAnalyze(comm: string) {
             } else if (commDropTable.test(comm)) {
                 const paras = comm.match(commDropTable) as string[]
                 const name = paras[1]
-                await table.drop(orm, name)
+                await TableService.drop(orm, name)
                     .then(r => {
                         return resolve(r)
                     })
@@ -161,7 +145,7 @@ async function grammarAnalyze(comm: string) {
                 const permission = paras[1]
                 const tables = paras[3] ? cutPara(paras[3], true, ".") as Map<string, string> : undefined
                 const userName = paras[4]
-                await account.grant(orm, permission, userName, tables)
+                await AccountService.grant(orm, permission, userName, tables)
                     .then(r => {
                         return resolve(r)
                     })
@@ -174,7 +158,7 @@ async function grammarAnalyze(comm: string) {
             if (commUse.test(comm)) {
                 const paras = comm.match(commUse) as string[]
                 const namespace = paras[1]
-                await database.use(orm, namespace)
+                await DatabaseService.use(orm, namespace)
                     .then(r => {
                         return resolve(r)
                     })
@@ -186,7 +170,7 @@ async function grammarAnalyze(comm: string) {
             const commSelectDatabase = /^ ?select database(\(\))? ?;? ?$/
             const commSelectRow = /^ ?select( distinct)? (.+?) from (.+?)( where (.+?))? ?;? ?$/
             if (commSelectDatabase.test(comm)) {
-                await database.select(orm)
+                await DatabaseService.select(orm)
                     .then(r => {
                         return resolve(r)
                     })
@@ -199,7 +183,7 @@ async function grammarAnalyze(comm: string) {
                 const cnames = cutPara(paras[2]) as string[]
                 const tnames = cutPara(paras[3]) as string[]
                 const conditions = paras[5] ? cutPara(paras[5]) as string[] : undefined
-                await table.select(orm, needDistinct, cnames, tnames, conditions)
+                await TableService.select(orm, needDistinct, cnames, tnames, conditions)
                     .then(r => {
                         return resolve(r)
                     })
@@ -212,7 +196,7 @@ async function grammarAnalyze(comm: string) {
             if (commDesc.test(comm)) {
                 const paras = comm.match(commDesc) as string[]
                 const name = paras[1]
-                await table.desc(orm, name)
+                await TableService.desc(orm, name)
                     .then(r => {
                         return resolve(r)
                     })
@@ -227,7 +211,7 @@ async function grammarAnalyze(comm: string) {
                 const name = paras[2]
                 const cnames = paras[4] ? cutPara(paras[4].slice(0, -1)) as string[] : undefined
                 const values = cutPara(paras[5].slice(0, -1)) as string[]
-                await table.insert(orm, name, values, cnames)
+                await TableService.insert(orm, name, values, cnames)
                     .then(r => {
                         return resolve(r)
                     })
@@ -242,7 +226,7 @@ async function grammarAnalyze(comm: string) {
                 const name = paras[1]
                 const values = cutPara(paras[2], true, "=") as Map<string, string>
                 const conditions = paras[4] ? cutPara(paras[4]) as string[] : undefined
-                await table.update(orm, name, values, conditions)
+                await TableService.update(orm, name, values, conditions)
                     .then(r => {
                         return resolve(r)
                     })
@@ -256,7 +240,7 @@ async function grammarAnalyze(comm: string) {
                 const paras = comm.match(commDelete) as string[]
                 const name = paras[1]
                 const conditions = paras[3] ? cutPara(paras[3]) as string[] : undefined
-                await table.del(orm, name, conditions)
+                await TableService.del(orm, name, conditions)
                     .then(r => {
                         return resolve(r)
                     })
@@ -269,29 +253,7 @@ async function grammarAnalyze(comm: string) {
     })
 }
 
-(async () => {
-    console.clear()
-    console.log("  " + blackBG(white("Copyright (c) Penyo. All rights reserved. ")))
-    console.log("  " + blue("欢迎使用 PenyoDB 交互式解释器！"))
-    console.log("  " + blue("您可以使用 SQL-like 来编写命令。"))
-    console.log()
-
-    let comm: string
-    do {
-        comm = (await blockingInput()).trim().toLowerCase()
-        console.log(italic(yellow("正在处理中......")))
-        if (comm !== "quit") {
-            await grammarAnalyze(comm)
-                .then(r => {
-                    console.log("\x1b[1F\x1b[K" + italic(green(typeof r === "string" ? r : JSON.stringify(r))))
-                })
-                .catch(e => {
-                    console.error("\x1b[1F\x1b[K" + italic(red(e)))
-                })
-        } else {
-            await orm.synchronize()
-            console.log("\x1b[1F\x1b[K" + "拜拜~ o(*￣▽￣*)ブ")
-            break
-        }
-    } while (1)
-})()
+/** 代理同步。 */
+export function synchronize() {
+    orm.synchronize()
+} 
