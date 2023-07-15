@@ -436,7 +436,8 @@ export class ORM {
             if (k === "admins.bin") {
                 const admins = JSON.parse(CryptoLite.fromBinary(v)) as Admin[]
                 admins.forEach(a => {
-                    ORM.accounts.push(new Admin(a.name, a.token))
+                    if (a.pmGlobal === Permission.DOMINATE && a.pmLocal.length === 0)
+                        ORM.accounts.push(new Admin(a.name, a.token))
                 })
             }
             else if (k === "users.bin") {

@@ -36,29 +36,25 @@ export namespace CryptoLite {
     }
 
     /** 将明文转换为二进制码。 */
-    export const toBinary = (plaintext: string) => {
-        let binaryString = ""
-        for (let i = 0; i < plaintext.length; i++) {
-            const char = plaintext.charAt(i)
-            const codePoint = char.codePointAt(0) as number
-            const binaryChar = codePoint.toString(2).padStart(8, '0')
-            binaryString += binaryChar
+    export const toBinary = (str: string) => {
+        const buffer = new TextEncoder().encode(str)
+        let binary = ""
+        for (let i = 0; i < buffer.length; i++) {
+            const binaryByte = buffer[i].toString(2).padStart(8, "0")
+            binary += binaryByte
         }
-        return binaryString
+        return binary
     }
 
     /** 将二进制码转换为明文。 */
-    export const fromBinary = (binaryString: string) => {
-        let result = ""
-        let i = 0
-        while (i < binaryString.length) {
-            const binaryChar = binaryString.substring(i, i + 8)
-            const codePoint = parseInt(binaryChar, 2)
-            if (isNaN(codePoint)) break
-            const char = String.fromCodePoint(codePoint)
-            result += char
-            i += 8
+    export const fromBinary = (binary: string) => {
+        let str = ""
+        for (let i = 0; i < binary.length; i += 8) {
+            const byte = binary.substring(i, i + 8)
+            const charCode = parseInt(byte, 2)
+            const char = String.fromCharCode(charCode)
+            str += char
         }
-        return result
+        return str
     }
 }
